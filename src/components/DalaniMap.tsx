@@ -190,9 +190,11 @@ export const DalaniMap: React.FC<DalaniMapProps> = ({
       // Rich Yemen Property Popup
       const popupContent = document.createElement('div');
       popupContent.className = 'p-3 max-w-[270px] text-right font-sans';
+      const mainImg = (listing.images && listing.images[0]) || 'https://images.unsplash.com/photo-1560518883-ce09059eeffa?auto=format&fit=crop&w=600&q=80';
+      const locationText = `${listing.location?.city || ''} ${listing.location?.district ? `- ${listing.location.district}` : ''}`.trim() || 'اليمن';
       popupContent.innerHTML = `
         <div class="relative overflow-hidden rounded-lg mb-2">
-          <img src="${listing.images[0]}" alt="${listing.title}" class="w-full h-28 object-cover rounded-md" />
+          <img src="${mainImg}" alt="${listing.title}" class="w-full h-28 object-cover rounded-md" />
           <span class="absolute top-2 right-2 bg-[#12A889] text-white text-[11px] font-bold px-2 py-0.5 rounded shadow">
             ${listing.purpose === 'sale' ? 'للبيع' : listing.purpose === 'rent' ? 'للإيجار' : 'استثمار'}
           </span>
@@ -203,11 +205,11 @@ export const DalaniMap: React.FC<DalaniMapProps> = ({
         <h4 class="font-bold text-sm text-[#16324F] mb-1 line-clamp-1 leading-snug">${listing.title}</h4>
         <div class="flex items-center gap-1 text-xs text-slate-500 mb-2">
           <span>📍</span>
-          <span>${listing.location.city} - ${listing.location.district}</span>
+          <span>${locationText}</span>
         </div>
         <div class="flex items-center justify-between text-xs border-t border-slate-100 pt-2 mb-2 text-slate-600 font-medium">
-          <span>المساحة: ${listing.area} ${listing.areaUnit}</span>
-          ${listing.attributes.rooms ? `<span>${listing.attributes.rooms} غرف</span>` : ''}
+          <span>المساحة: ${listing.area || 0} ${listing.areaUnit || 'م²'}</span>
+          ${listing.attributes?.rooms ? `<span>${listing.attributes.rooms} غرف</span>` : ''}
         </div>
         <button id="view-listing-${listing.id}" class="w-full py-1.5 px-3 bg-[#16324F] hover:bg-[#12A889] text-white text-xs font-bold rounded-lg transition-colors flex items-center justify-center gap-1">
           <span>معاينة التفاصيل الكاملة</span>

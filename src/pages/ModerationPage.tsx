@@ -156,7 +156,11 @@ export const ModerationPage: React.FC<ModerationPageProps> = ({ onSelectListing 
               <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
                 <div className="flex items-start gap-4">
                   <div className="w-24 h-24 rounded-xl overflow-hidden bg-slate-100 flex-shrink-0 border border-slate-200">
-                    <img src={listing.images[0]} alt={listing.title} className="w-full h-full object-cover" />
+                    <img
+                      src={(listing.images && listing.images[0]) || 'https://images.unsplash.com/photo-1560518883-ce09059eeffa?auto=format&fit=crop&w=600&q=80'}
+                      alt={listing.title}
+                      className="w-full h-full object-cover"
+                    />
                   </div>
 
                   <div className="space-y-1.5">
@@ -165,19 +169,21 @@ export const ModerationPage: React.FC<ModerationPageProps> = ({ onSelectListing 
                         {listing.status === 'under_review' ? 'قيد المراجعة' : listing.status}
                       </span>
                       <span className="font-mono text-xs text-slate-400 font-bold">{listing.listingNumber}</span>
-                      <span className="text-xs text-slate-400">تاريخ التقديم: {listing.createdAt}</span>
+                      <span className="text-xs text-slate-400">تاريخ التقديم: {listing.createdAt || 'اليوم'}</span>
                     </div>
 
                     <h3 className="font-black text-base text-[#16324F] line-clamp-1">{listing.title}</h3>
 
                     <div className="flex items-center gap-3 text-xs text-slate-600 flex-wrap">
-                      <span>📍 {listing.location.governorate} - {listing.location.district}</span>
+                      <span>📍 {listing.location?.governorate || 'اليمن'} {listing.location?.district ? `- ${listing.location.district}` : ''}</span>
                       <span>•</span>
                       <span className="font-bold text-[#12A889]">
-                        {listing.currency === 'USD' ? `$${listing.price.toLocaleString()}` : `${listing.price.toLocaleString()} ${listing.currency}`}
+                        {listing.currency === 'USD'
+                          ? `$${(listing.price || 0).toLocaleString()}`
+                          : `${(listing.price || 0).toLocaleString()} ${listing.currency || 'YER'}`}
                       </span>
                       <span>•</span>
-                      <span>المساحة: {listing.area} {listing.areaUnit}</span>
+                      <span>المساحة: {listing.area || 0} {listing.areaUnit || 'م²'}</span>
                     </div>
 
                     <div className="text-xs text-slate-500 line-clamp-2 pt-1">{listing.description}</div>
@@ -187,9 +193,9 @@ export const ModerationPage: React.FC<ModerationPageProps> = ({ onSelectListing 
                 {/* Submitter info */}
                 <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs space-y-1 flex-shrink-0 w-full md:w-64">
                   <span className="font-bold text-slate-400 text-[10px] block">بيانات مقدم الإعلان:</span>
-                  <div className="font-bold text-[#16324F]">{listing.advertiser.name}</div>
-                  <div className="text-slate-500 font-mono">هاتف: {listing.advertiser.phone}</div>
-                  {listing.advertiser.orgName && (
+                  <div className="font-bold text-[#16324F]">{listing.advertiser?.name || 'معلن غير مسمى'}</div>
+                  <div className="text-slate-500 font-mono">هاتف: {listing.advertiser?.phone || 'غير محدد'}</div>
+                  {listing.advertiser?.orgName && (
                     <div className="text-[#12A889] font-bold text-[11px]">{listing.advertiser.orgName}</div>
                   )}
                 </div>

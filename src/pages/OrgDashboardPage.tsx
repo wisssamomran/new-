@@ -153,7 +153,11 @@ export const OrgDashboardPage: React.FC<OrgDashboardPageProps> = ({ onSelectList
             >
               <div className="flex items-start gap-3">
                 <div className="w-16 h-16 rounded-xl overflow-hidden bg-slate-100 flex-shrink-0">
-                  <img src={listing.images[0]} alt={listing.title} className="w-full h-full object-cover" />
+                  <img
+                    src={(listing.images && listing.images[0]) || 'https://images.unsplash.com/photo-1560518883-ce09059eeffa?auto=format&fit=crop&w=600&q=80'}
+                    alt={listing.title}
+                    className="w-full h-full object-cover"
+                  />
                 </div>
                 <div>
                   <div className="flex items-center gap-2 text-[11px]">
@@ -172,7 +176,7 @@ export const OrgDashboardPage: React.FC<OrgDashboardPageProps> = ({ onSelectList
                     {listing.title}
                   </h4>
                   <div className="text-xs text-slate-500">
-                    {listing.location.city} - {listing.location.district} • {listing.price.toLocaleString()} {listing.currency}
+                    {listing.location?.city || ''} {listing.location?.district ? `- ${listing.location.district}` : ''} • {(listing.price || 0).toLocaleString()} {listing.currency || 'YER'}
                   </div>
                 </div>
               </div>

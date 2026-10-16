@@ -49,15 +49,21 @@ export const ListingDetailsPage: React.FC<ListingDetailsPageProps> = ({
   const [reporterName, setReporterName] = useState('');
   const [reporterPhone, setReporterPhone] = useState('');
 
+  // Safe images fallback
+  const safeImages = (listing.images && listing.images.length > 0)
+    ? listing.images
+    : ['https://images.unsplash.com/photo-1560518883-ce09059eeffa?auto=format&fit=crop&w=1200&q=80'];
+
   // Format Price
   const formattedPrice = () => {
+    const p = listing.price || 0;
     if (listing.currency === 'USD') {
-      return `$${listing.price.toLocaleString()}`;
+      return `$${p.toLocaleString()}`;
     }
     if (listing.currency === 'SAR') {
-      return `${listing.price.toLocaleString()} ر.س`;
+      return `${p.toLocaleString()} ر.س`;
     }
-    return `${listing.price.toLocaleString()} ريال يمني`;
+    return `${p.toLocaleString()} ريال يمني`;
   };
 
   const handleShare = () => {
@@ -76,7 +82,7 @@ export const ListingDetailsPage: React.FC<ListingDetailsPageProps> = ({
       listingId: listing.id,
       listingTitle: listing.title,
       listingSnapshotPrice: formattedPrice(),
-      listingSnapshotAdvertiser: listing.advertiser.name,
+      listingSnapshotAdvertiser: listing.advertiser?.name || 'معلن',
       reporterName,
       reporterPhone,
       reason: reportReason,
@@ -96,7 +102,7 @@ export const ListingDetailsPage: React.FC<ListingDetailsPageProps> = ({
       l =>
         l.id !== listing.id &&
         l.status === 'published' &&
-        (l.location.governorate === listing.location.governorate || l.propertyType === listing.propertyType)
+        (l.location?.governorate === listing.location?.governorate || l.propertyType === listing.propertyType)
     )
     .slice(0, 3);
 
@@ -164,7 +170,7 @@ export const ListingDetailsPage: React.FC<ListingDetailsPageProps> = ({
           <div className="space-y-3">
             <div className="relative rounded-3xl overflow-hidden h-[340px] md:h-[480px] bg-slate-900 border border-slate-200 shadow-sm">
               <img
-                src={listing.images[activeImageIndex] || listing.images[0]}
+                src={safeImages[activeImageIndex] || safeImages[0]}
                 alt={listing.title}
                 className="w-full h-full object-cover transition-all duration-300"
               />
@@ -179,9 +185,9 @@ export const ListingDetailsPage: React.FC<ListingDetailsPageProps> = ({
             </div>
 
             {/* Thumbnail Row */}
-            {listing.images.length > 1 && (
+            {safeImages.length > 1 && (
               <div className="flex items-center gap-3 overflow-x-auto pb-1 scrollbar-none">
-                {listing.images.map((img, idx) => (
+                {safeImages.map((img, idx) => (
                   <button
                     key={idx}
                     onClick={() => setActiveImageIndex(idx)}

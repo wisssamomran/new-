@@ -174,7 +174,7 @@ export const MyAdsPage: React.FC<MyAdsPageProps> = ({ onNavigateToWizard, onSele
                 <div className="flex items-start gap-4">
                   <div className="w-20 h-20 rounded-xl overflow-hidden bg-slate-100 flex-shrink-0 border border-slate-200">
                     <img
-                      src={listing.images[0]}
+                      src={(listing.images && listing.images[0]) || 'https://images.unsplash.com/photo-1560518883-ce09059eeffa?auto=format&fit=crop&w=600&q=80'}
                       alt={listing.title}
                       className="w-full h-full object-cover"
                     />
@@ -190,7 +190,7 @@ export const MyAdsPage: React.FC<MyAdsPageProps> = ({ onNavigateToWizard, onSele
                         {listing.listingNumber}
                       </span>
                       <span className="text-[11px] text-slate-400">
-                        تحديث: {listing.updatedAt}
+                        تحديث: {listing.updatedAt || 'اليوم'}
                       </span>
                     </div>
 
@@ -202,13 +202,15 @@ export const MyAdsPage: React.FC<MyAdsPageProps> = ({ onNavigateToWizard, onSele
                     </h3>
 
                     <div className="flex items-center gap-3 text-xs text-slate-500">
-                      <span>📍 {listing.location.city} - {listing.location.district}</span>
+                      <span>📍 {listing.location?.city || ''} {listing.location?.district ? `- ${listing.location.district}` : ''}</span>
                       <span>•</span>
                       <span className="font-bold text-[#12A889]">
-                        {listing.currency === 'USD' ? `$${listing.price.toLocaleString()}` : `${listing.price.toLocaleString()} ${listing.currency}`}
+                        {listing.currency === 'USD'
+                          ? `$${(listing.price || 0).toLocaleString()}`
+                          : `${(listing.price || 0).toLocaleString()} ${listing.currency || 'YER'}`}
                       </span>
                       <span>•</span>
-                      <span>{listing.area} {listing.areaUnit}</span>
+                      <span>{listing.area || 0} {listing.areaUnit || 'م²'}</span>
                     </div>
 
                     {/* Needs Changes Banner */}

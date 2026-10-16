@@ -130,13 +130,13 @@ export const AdWizardPage: React.FC<AdWizardPageProps> = ({ onFinish, onCancel }
     showToast('تم إرفاق المستند في الخزانة الخاصة بالمشرفين', 'success');
   };
 
-  const handleSubmit = (asDraft: boolean = false) => {
+  const handleSubmit = async (asDraft: boolean = false) => {
     if (!title.trim() || !description.trim() || price <= 0) {
       showToast('يرجى ملء عنوان الإعلان ووصفه وتحديد السعر بشكل سليم', 'error');
       return;
     }
 
-    const created = createListing({
+    const created = await createListing({
       title: title.trim(),
       description: description.trim(),
       propertyType,
@@ -197,7 +197,9 @@ export const AdWizardPage: React.FC<AdWizardPageProps> = ({ onFinish, onCancel }
       ]
     });
 
-    onFinish(created.id);
+    if (created) {
+      onFinish(created.id);
+    }
   };
 
   const stepsList = [

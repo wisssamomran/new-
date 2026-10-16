@@ -411,7 +411,11 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate, onSelectListing 
         <div className="absolute bottom-16 inset-x-3 sm:inset-x-auto sm:right-6 sm:w-96 z-30 pointer-events-auto bg-white/95 backdrop-blur-md rounded-3xl p-3 shadow-2xl border border-slate-200/90 animate-in slide-in-from-bottom-4 duration-200">
           <div className="relative flex items-center gap-3">
             <div className="relative w-24 h-24 rounded-2xl overflow-hidden bg-slate-100 flex-shrink-0">
-              <img src={selectedListing.images[0]} alt={selectedListing.title} className="w-full h-full object-cover" />
+              <img
+                src={(selectedListing.images && selectedListing.images[0]) || 'https://images.unsplash.com/photo-1560518883-ce09059eeffa?auto=format&fit=crop&w=600&q=80'}
+                alt={selectedListing.title}
+                className="w-full h-full object-cover"
+              />
               <span className="absolute top-1 right-1 px-1.5 py-0.5 rounded-md bg-[#12A889] text-white text-[9px] font-bold">
                 {selectedListing.purpose === 'sale' ? 'للبيع' : 'للإيجار'}
               </span>
@@ -421,8 +425,8 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate, onSelectListing 
               <div className="flex items-center justify-between mb-1">
                 <span className="font-black text-sm text-[#12A889]">
                   {selectedListing.currency === 'USD'
-                    ? `$${selectedListing.price.toLocaleString()}`
-                    : `${selectedListing.price.toLocaleString()} ${selectedListing.currency}`}
+                    ? `$${(selectedListing.price || 0).toLocaleString()}`
+                    : `${(selectedListing.price || 0).toLocaleString()} ${selectedListing.currency || 'YER'}`}
                 </span>
                 <button
                   onClick={() => setSelectedListing(null)}
@@ -435,11 +439,11 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate, onSelectListing 
               <h4 className="font-bold text-xs text-[#16324F] truncate mb-1">{selectedListing.title}</h4>
               <div className="flex items-center gap-1 text-[11px] text-slate-500 mb-2 truncate">
                 <MapPin className="w-3 h-3 text-[#12A889] flex-shrink-0" />
-                <span>{selectedListing.location.city} - {selectedListing.location.district}</span>
+                <span>{selectedListing.location?.city || ''} {selectedListing.location?.district ? `- ${selectedListing.location.district}` : ''}</span>
               </div>
 
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[10px] text-slate-400 font-bold">{selectedListing.area} {selectedListing.areaUnit}</span>
+                <span className="text-[10px] text-slate-400 font-bold">{selectedListing.area || 0} {selectedListing.areaUnit || 'م²'}</span>
                 <button
                   onClick={() => onSelectListing(selectedListing)}
                   className="px-3 py-1 bg-[#16324F] hover:bg-[#12A889] text-white text-xs font-bold rounded-xl transition-colors flex items-center gap-1"

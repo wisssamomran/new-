@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import {
   Listing,
   User,
@@ -40,10 +40,10 @@ interface AppContextType {
   setGoogleMapsApiKey: (key: string) => void;
   
   // Listings CRUD & Transitions
-  createListing: (listingData: Omit<Listing, 'id' | 'listingNumber' | 'createdAt' | 'updatedAt' | 'viewsCount' | 'favoritesCount' | 'statusTimeline'>) => Listing;
-  updateListing: (id: string, updates: Partial<Listing>) => void;
-  deleteListing: (id: string) => void;
-  changeListingStatus: (id: string, newStatus: ListingStatus, reason?: string, notes?: string, missingFields?: string[]) => void;
+  createListing: (listingData: Omit<Listing, 'id' | 'listingNumber' | 'createdAt' | 'updatedAt' | 'viewsCount' | 'favoritesCount' | 'statusTimeline'>) => Promise<Listing | null>;
+  updateListing: (id: string, updates: Partial<Listing>) => Promise<void>;
+  deleteListing: (id: string) => Promise<void>;
+  changeListingStatus: (id: string, newStatus: ListingStatus, reason?: string, notes?: string, missingFields?: string[]) => Promise<void>;
   toggleFavorite: (listingId: string) => void;
   isFavorite: (listingId: string) => boolean;
   
@@ -53,16 +53,16 @@ interface AppContextType {
   assignListingToAgent: (listingId: string, agentId: string, agentName: string) => void;
   
   // Verification actions
-  submitVerificationRequest: (req: Omit<VerificationRequest, 'id' | 'createdAt' | 'status'>) => void;
-  reviewVerificationRequest: (id: string, status: 'approved' | 'rejected' | 'needs_info', notes: string) => void;
+  submitVerificationRequest: (req: Omit<VerificationRequest, 'id' | 'createdAt' | 'status'>) => Promise<void>;
+  reviewVerificationRequest: (id: string, status: 'approved' | 'rejected' | 'needs_info', notes: string) => Promise<void>;
   
   // Reports actions
-  submitReport: (report: Omit<ReportCase, 'id' | 'caseNumber' | 'createdAt' | 'status'>) => void;
-  resolveReport: (id: string, status: 'resolved_ad_suspended' | 'dismissed', resolutionReason: string) => void;
+  submitReport: (report: Omit<ReportCase, 'id' | 'caseNumber' | 'createdAt' | 'status'>) => Promise<void>;
+  resolveReport: (id: string, status: 'resolved_ad_suspended' | 'dismissed', resolutionReason: string) => Promise<void>;
   
   // Support actions
-  createTicket: (subject: string, category: SupportTicket['category'], priority: SupportTicket['priority'], initialMessage: string) => void;
-  replyToTicket: (ticketId: string, text: string) => void;
+  createTicket: (subject: string, category: SupportTicket['category'], priority: SupportTicket['priority'], initialMessage: string) => Promise<void>;
+  replyToTicket: (ticketId: string, text: string) => Promise<void>;
   updateTicketStatus: (ticketId: string, status: SupportTicket['status']) => void;
   
   // Audit logger
@@ -73,21 +73,77 @@ interface AppContextType {
   showToast: (message: string, type?: Toast['type']) => void;
   removeToast: (id: string) => void;
   
-  // Reset all data
+  // Refresh & Reset
+  refreshData: () => Promise<void>;
   resetToInitialData: () => void;
 }
+
+export const normalizeListing = (l: any): Listing => {
+  return {
+    ...l,
+    id: l.id || `list-${Date.now()}`,
+    listingNumber: l.listingNumber || 'YEM-2026-000',
+    title: l.title || 'عقار معروض',
+    description: l.description || '',
+    propertyType: l.propertyType || 'apartment',
+    purpose: l.purpose || 'sale',
+    status: l.status || 'under_review',
+    price: typeof l.price === 'number' ? l.price : 0,
+    currency: l.currency || 'YER',
+    isNegotiable: Boolean(l.isNegotiable),
+    area: typeof l.area === 'number' ? l.area : 0,
+    areaUnit: l.areaUnit || 'م²',
+    images: (Array.isArray(l.images) && l.images.length > 0)
+      ? l.images
+      : ['https://images.unsplash.com/photo-1560518883-ce09059eeffa?auto=format&fit=crop&w=1000&q=80'],
+    location: {
+      governorate: l.location?.governorate || 'صنعاء (أمانة العاصمة)',
+      city: l.location?.city || 'صنعاء',
+      district: l.location?.district || 'الأمانة',
+      street: l.location?.street || '',
+      lat: typeof l.location?.lat === 'number' ? l.location.lat : 15.312,
+      lng: typeof l.location?.lng === 'number' ? l.location.lng : 44.187,
+      isApproximate: l.location?.isApproximate ?? true
+    },
+    attributes: l.attributes || {},
+    advertiser: {
+      id: l.advertiser?.id || 'adv-unknown',
+      name: l.advertiser?.name || 'معلن دلنّي',
+      type: l.advertiser?.type || 'individual',
+      phone: l.advertiser?.phone || '777000000',
+      phoneVerified: l.advertiser?.phoneVerified ?? true,
+      allowWhatsapp: l.advertiser?.allowWhatsapp ?? true,
+      allowCall: l.advertiser?.allowCall ?? true,
+      orgId: l.advertiser?.orgId,
+      orgName: l.advertiser?.orgName
+    },
+    verificationBadges: Array.isArray(l.verificationBadges) ? l.verificationBadges : [],
+    statusTimeline: Array.isArray(l.statusTimeline) ? l.statusTimeline : [],
+    viewsCount: typeof l.viewsCount === 'number' ? l.viewsCount : 0,
+    favoritesCount: typeof l.favoritesCount === 'number' ? l.favoritesCount : 0,
+    createdAt: l.createdAt || new Date().toISOString().split('T')[0],
+    updatedAt: l.updatedAt || new Date().toISOString().split('T')[0]
+  };
+};
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Current active user / role
-  const [currentRole, setCurrentRole] = useState<UserRole>('visitor');
-  const [currentUser, setCurrentUser] = useState<User>(MOCK_USERS['visitor']);
+  const [currentUser, setCurrentUser] = useState<User>(() => {
+    const saved = localStorage.getItem('dalani_current_user');
+    return saved ? JSON.parse(saved) : MOCK_USERS['visitor'];
+  });
 
-  // Main collections with localStorage persistence
+  // Main collections
   const [listings, setListings] = useState<Listing[]>(() => {
-    const saved = localStorage.getItem('dalani_listings');
-    return saved ? JSON.parse(saved) : INITIAL_LISTINGS;
+    try {
+      const saved = localStorage.getItem('dalani_listings');
+      const raw = saved ? JSON.parse(saved) : INITIAL_LISTINGS;
+      return Array.isArray(raw) ? raw.map(normalizeListing) : INITIAL_LISTINGS.map(normalizeListing);
+    } catch {
+      return INITIAL_LISTINGS.map(normalizeListing);
+    }
   });
 
   const [organizations, setOrganizations] = useState<Organization[]>(() => {
@@ -124,70 +180,116 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return localStorage.getItem('dalani_gmaps_key') || (import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string) || '';
   });
 
+  const [toasts, setToasts] = useState<Toast[]>([]);
+
+  const showToast = useCallback((message: string, type: Toast['type'] = 'info') => {
+    const id = Date.now().toString() + Math.random().toString(36).substring(2, 6);
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 4500);
+  }, []);
+
+  const removeToast = (id: string) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  };
+
+  // Helper for authenticated server requests
+  const apiFetch = useCallback(async (url: string, options: RequestInit = {}) => {
+    const headers = {
+      'Content-Type': 'application/json',
+      'x-user-role': currentUser.role,
+      'Authorization': `Bearer ${currentUser.id}`,
+      ...(options.headers || {})
+    };
+    try {
+      const res = await fetch(url, { ...options, headers });
+      return res;
+    } catch (err) {
+      console.warn(`[Dalani API] Network error for ${url}:`, err);
+      return null;
+    }
+  }, [currentUser]);
+
+  // Sync data from Server API
+  const refreshData = useCallback(async () => {
+    try {
+      const res = await apiFetch('/api/listings');
+      if (res && res.ok) {
+        const data = await res.json();
+        if (data.listings && Array.isArray(data.listings)) {
+          const normalized = data.listings.map(normalizeListing);
+          setListings(normalized);
+          localStorage.setItem('dalani_listings', JSON.stringify(normalized));
+        }
+      }
+
+      // If privileged role, load audit logs
+      if (currentUser.role === 'system_admin') {
+        const auditRes = await apiFetch('/api/audit-logs');
+        if (auditRes && auditRes.ok) {
+          const auditData = await auditRes.json();
+          if (auditData.logs) {
+            setAuditLogs(auditData.logs);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[Dalani Client] Server sync fallback to local cache:', e);
+    }
+  }, [apiFetch, currentUser.role]);
+
+  // Initial load and whenever role changes
+  useEffect(() => {
+    refreshData();
+  }, [refreshData]);
+
+  // Local storage backup sync
+  useEffect(() => {
+    localStorage.setItem('dalani_current_user', JSON.stringify(currentUser));
+  }, [currentUser]);
+
+  useEffect(() => {
+    localStorage.setItem('dalani_listings', JSON.stringify(listings));
+  }, [listings]);
+
+  useEffect(() => {
+    localStorage.setItem('dalani_favorites', JSON.stringify(favorites));
+  }, [favorites]);
+
   const setGoogleMapsApiKey = (key: string) => {
     setGoogleMapsApiKeyState(key);
     localStorage.setItem('dalani_gmaps_key', key);
     showToast('تم تحديث مفتاح Google Maps API بنجاح', 'success');
   };
 
-  const [toasts, setToasts] = useState<Toast[]>([]);
-
-  // Sync state to localStorage
-  useEffect(() => {
-    localStorage.setItem('dalani_listings', JSON.stringify(listings));
-  }, [listings]);
-
-  useEffect(() => {
-    localStorage.setItem('dalani_orgs', JSON.stringify(organizations));
-  }, [organizations]);
-
-  useEffect(() => {
-    localStorage.setItem('dalani_verifications', JSON.stringify(verificationRequests));
-  }, [verificationRequests]);
-
-  useEffect(() => {
-    localStorage.setItem('dalani_reports', JSON.stringify(reports));
-  }, [reports]);
-
-  useEffect(() => {
-    localStorage.setItem('dalani_tickets', JSON.stringify(tickets));
-  }, [tickets]);
-
-  useEffect(() => {
-    localStorage.setItem('dalani_audit_logs', JSON.stringify(auditLogs));
-  }, [auditLogs]);
-
-  useEffect(() => {
-    localStorage.setItem('dalani_favorites', JSON.stringify(favorites));
-  }, [favorites]);
-
-  // Update current user when role changes
-  const setCurrentUserRole = (role: UserRole) => {
-    setCurrentRole(role);
+  // Switch role simulator
+  const setCurrentUserRole = async (role: UserRole) => {
     const user = MOCK_USERS[role] || {
-      id: `usr-${role}`,
-      name: `مستخدم (${role})`,
-      phone: '770000000',
+      id: `usr-${role}-${Date.now()}`,
+      name: `مستخدم تجريبي (${role})`,
+      phone: '+967 770 000 000',
       phoneVerified: true,
       role: role,
       activeStatus: true,
       createdAt: new Date().toISOString()
     };
+
     setCurrentUser(user);
-    logAction('تبديل دور المستخدم', 'user', user.id, 'success', `تم التبديل إلى دور: ${role}`);
+
+    // Notify backend
+    try {
+      await fetch('/api/auth/switch-role', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role })
+      });
+    } catch (e) {
+      // offline fallback
+    }
+
+    logAction('تبديل دور المستخدم', 'user', user.id, 'success', `تم التبديل إلى دور: [${role}]`);
     showToast(`تم التبديل إلى دور: ${user.name}`, 'info');
-  };
-
-  const showToast = (message: string, type: Toast['type'] = 'info') => {
-    const id = Date.now().toString() + Math.random().toString(36).substring(2, 6);
-    setToasts(prev => [...prev, { id, message, type }]);
-    setTimeout(() => {
-      removeToast(id);
-    }, 4500);
-  };
-
-  const removeToast = (id: string) => {
-    setToasts(prev => prev.filter(t => t.id !== id));
   };
 
   const logAction = (
@@ -212,13 +314,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setAuditLogs(prev => [newEntry, ...prev]);
   };
 
-  const createListing = (data: Omit<Listing, 'id' | 'listingNumber' | 'createdAt' | 'updatedAt' | 'viewsCount' | 'favoritesCount' | 'statusTimeline'>): Listing => {
+  // --- Listings Operations ---
+  const createListing = async (
+    data: Omit<Listing, 'id' | 'listingNumber' | 'createdAt' | 'updatedAt' | 'viewsCount' | 'favoritesCount' | 'statusTimeline'>
+  ): Promise<Listing | null> => {
+    try {
+      const res = await apiFetch('/api/listings', {
+        method: 'POST',
+        body: JSON.stringify(data)
+      });
+
+      if (res) {
+        const json = await res.json();
+        if (!res.ok) {
+          showToast(json.error || 'تعذر إنشاء الإعلان', 'error');
+          return null;
+        }
+
+        const newListing: Listing = normalizeListing(json.listing);
+        setListings(prev => [newListing, ...prev]);
+        showToast(json.message || `تم حفظ الإعلان بنجاح برقم: ${newListing.listingNumber}`, 'success');
+        return newListing;
+      }
+    } catch (err) {
+      console.warn('API error during createListing, fallback to local creation:', err);
+    }
+
+    // Fallback local logic if server offline
     const nextSeq = listings.length + 101;
     const listingNumber = `YEM-2026-${nextSeq}`;
     const now = new Date().toISOString().split('T')[0];
-    const initialStatus = data.status || 'under_review';
+    const initialStatus: ListingStatus = data.status || 'under_review';
 
-    const newListing: Listing = {
+    const fallbackListing: Listing = normalizeListing({
       ...data,
       id: 'list-' + Date.now(),
       listingNumber,
@@ -230,52 +358,81 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       statusTimeline: [
         {
           status: initialStatus,
-          timestamp: new Date().toLocaleString('ar-YE'),
+          timestamp: new Date().toLocaleString('ar-YE', { dateStyle: 'short', timeStyle: 'short' }),
           changedBy: currentUser.name,
           userRole: currentUser.role,
           notes: 'إنشاء الإعلان وإرساله للمراجعة'
         }
       ]
-    };
+    });
 
-    setListings(prev => [newListing, ...prev]);
-    logAction('إنشاء إعلان جديد', 'listing', newListing.id, 'success', `تم إنشاء الإعلان ${listingNumber} بحالة ${initialStatus}`);
+    setListings(prev => [fallbackListing, ...prev]);
     showToast(`تم حفظ الإعلان بنجاح برقم: ${listingNumber}`, 'success');
-    return newListing;
+    return fallbackListing;
   };
 
-  const updateListing = (id: string, updates: Partial<Listing>) => {
+  const updateListing = async (id: string, updates: Partial<Listing>) => {
+    try {
+      const res = await apiFetch(`/api/listings/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(updates)
+      });
+
+      if (res && !res.ok) {
+        const json = await res.json();
+        showToast(json.error || 'تعذر تحديث الإعلان', 'error');
+        return;
+      }
+    } catch (e) {
+      // offline fallback
+    }
+
     setListings(prev =>
       prev.map(l => (l.id === id ? { ...l, ...updates, updatedAt: new Date().toISOString().split('T')[0] } : l))
     );
-    logAction('تعديل إعلان', 'listing', id, 'success', 'تم تعديل بيانات الإعلان');
     showToast('تم تحديث بيانات الإعلان بنجاح', 'success');
   };
 
-  const deleteListing = (id: string) => {
+  const deleteListing = async (id: string) => {
+    try {
+      await apiFetch(`/api/listings/${id}`, { method: 'DELETE' });
+    } catch (e) {
+      // offline fallback
+    }
+
     const listing = listings.find(l => l.id === id);
     setListings(prev => prev.filter(l => l.id !== id));
     logAction('حذف إعلان', 'listing', id, 'warning', `تم حذف الإعلان: ${listing?.title || id}`);
     showToast('تم حذف الإعلان', 'info');
   };
 
-  const changeListingStatus = (
+  const changeListingStatus = async (
     id: string,
     newStatus: ListingStatus,
     reason?: string,
     notes?: string,
     missingFields?: string[]
   ) => {
-    const listing = listings.find(l => l.id === id);
-    if (!listing) return;
+    // Client-side guard check
+    if (currentUser.role === 'advertiser' && newStatus === 'published') {
+      logAction('محاولة غير مصرح بها', 'listing', id, 'denied', 'المعلن لا يملك صلاحية اعتماد إعلانه بنفسه');
+      showToast('غير مصرح للمعلن باعتماد الإعلان بنفسه، يتطلب مراجعة المشرف', 'error');
+      return;
+    }
 
-    // Security & Business Rule check: Advertisers cannot approve their own listings
-    if (currentUser.role === 'advertiser' && (newStatus === 'published' || newStatus === 'under_review')) {
-      if (newStatus === 'published') {
-        logAction('محاولة غير مصرح بها', 'listing', id, 'denied', 'المعلن لا يملك صلاحية اعتماد إعلانه بنفسه');
-        showToast('غير مصرح للمعلن باعتماد الإعلان بنفسه، يتطلب مراجعة المشرف', 'error');
+    try {
+      const res = await apiFetch(`/api/listings/${id}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: newStatus, reason, notes, missingFields })
+      });
+
+      if (res && !res.ok) {
+        const json = await res.json();
+        showToast(json.error || 'تعذر تغيير حالة الإعلان', 'error');
         return;
       }
+    } catch (e) {
+      // offline fallback
     }
 
     const timelineEntry = {
@@ -327,6 +484,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const isFavorite = (listingId: string) => favorites.includes(listingId);
 
+  // --- Organization Actions ---
   const addOrgMember = (orgId: string, name: string, phone: string, roleInOrg: 'manager' | 'agent' | 'assistant') => {
     const newMember = {
       id: 'mem-' + Date.now(),
@@ -364,7 +522,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return org;
       })
     );
-    logAction('تعديل حالة عضو منشأة', 'organization', orgId, 'warning', `تعديل حالة العضو: ${memberId}`);
     showToast('تم تعديل حالة تفعيل العضو', 'info');
   };
 
@@ -376,7 +533,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     showToast(`تم إسناد الإعلان إلى ${agentName}`, 'success');
   };
 
-  const submitVerificationRequest = (req: Omit<VerificationRequest, 'id' | 'createdAt' | 'status'>) => {
+  // --- Verification Actions ---
+  const submitVerificationRequest = async (req: Omit<VerificationRequest, 'id' | 'createdAt' | 'status'>) => {
+    try {
+      await apiFetch('/api/verifications', {
+        method: 'POST',
+        body: JSON.stringify(req)
+      });
+    } catch (e) {
+      // offline fallback
+    }
+
     const newReq: VerificationRequest = {
       ...req,
       id: 'ver-' + Date.now(),
@@ -384,11 +551,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAt: new Date().toISOString().split('T')[0]
     };
     setVerificationRequests(prev => [newReq, ...prev]);
-    logAction('تقديم طلب تحقق', 'verification', newReq.id, 'success', `طلب تحقق لـ: ${req.targetName}`);
     showToast('تم تقديم طلب التحقق وسيقوم الفريق بمراجعته قريباً', 'success');
   };
 
-  const reviewVerificationRequest = (id: string, status: 'approved' | 'rejected' | 'needs_info', notes: string) => {
+  const reviewVerificationRequest = async (id: string, status: 'approved' | 'rejected' | 'needs_info', notes: string) => {
+    try {
+      await apiFetch(`/api/verifications/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status, notes, badgeType: 'deed_reviewed', validityNote: notes })
+      });
+    } catch (e) {
+      // offline fallback
+    }
+
     setVerificationRequests(prev =>
       prev.map(v =>
         v.id === id
@@ -403,7 +578,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       )
     );
 
-    // If approved, update target listing badges if applicable
     const targetReq = verificationRequests.find(v => v.id === id);
     if (status === 'approved' && targetReq?.requestType === 'property_deed') {
       setListings(prev =>
@@ -421,7 +595,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     description: 'تمت مراجعة الوثيقة الثبوتية للبصيرة الشرعية للأرض أو العقار.',
                     verifiedAt: new Date().toISOString().split('T')[0],
                     verifiedBy: currentUser.name,
-                    validityNote: 'مراجعة سارية',
+                    validityNote: 'مراجعة سارية ومطابقة',
                     disclaimer: 'المراجعة لا تُغني عن التحري الميداني في المحكمة وسؤال الجيران.'
                   }
                 ]
@@ -433,11 +607,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       );
     }
 
-    logAction('مراجعة طلب تحقق', 'verification', id, status === 'approved' ? 'success' : 'warning', `القرار: ${status} - ${notes}`);
     showToast(`تم تسجيل قرار التحقق: ${status}`, 'success');
   };
 
-  const submitReport = (report: Omit<ReportCase, 'id' | 'caseNumber' | 'createdAt' | 'status'>) => {
+  // --- Reports Actions ---
+  const submitReport = async (report: Omit<ReportCase, 'id' | 'caseNumber' | 'createdAt' | 'status'>) => {
+    try {
+      await apiFetch('/api/reports', {
+        method: 'POST',
+        body: JSON.stringify(report)
+      });
+    } catch (e) {
+      // offline fallback
+    }
+
     const nextCaseNo = `REP-2026-00${reports.length + 50}`;
     const newReport: ReportCase = {
       ...report,
@@ -447,13 +630,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAt: new Date().toLocaleString('ar-YE', { dateStyle: 'short', timeStyle: 'short' })
     };
     setReports(prev => [newReport, ...prev]);
-    logAction('تقديم بلاغ جديد', 'report', newReport.id, 'warning', `تم فتح البلاغ ${nextCaseNo} على الإعلان ${report.listingTitle}`);
-    showToast('شكراً لحرصك، تم تسجيل البلاغ وسيتولى الفريق المختص التدقيق فيه بسرية تامة', 'success');
+    showToast('تم استلام بلاغك وسيقوم فريق النزاعات بالتحقق الفوري', 'info');
   };
 
-  const resolveReport = (id: string, status: 'resolved_ad_suspended' | 'dismissed', resolutionReason: string) => {
-    const rep = reports.find(r => r.id === id);
-    if (!rep) return;
+  const resolveReport = async (id: string, status: 'resolved_ad_suspended' | 'dismissed', resolutionReason: string) => {
+    try {
+      await apiFetch(`/api/reports/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: status === 'resolved_ad_suspended' ? 'action_taken' : 'dismissed', resolutionNotes: resolutionReason })
+      });
+    } catch (e) {
+      // offline fallback
+    }
 
     setReports(prev =>
       prev.map(r =>
@@ -462,89 +650,132 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               ...r,
               status,
               resolutionReason,
-              resolvedAt: new Date().toLocaleString('ar-YE', { dateStyle: 'short', timeStyle: 'short' })
+              resolvedAt: new Date().toISOString().split('T')[0],
+              resolvedBy: currentUser.name
             }
           : r
       )
     );
 
     if (status === 'resolved_ad_suspended') {
-      // Suspend listing
-      changeListingStatus(rep.listingId, 'suspended', 'إيقاف بناءً على معالجة بلاغ رقم ' + rep.caseNumber, resolutionReason);
+      const rep = reports.find(r => r.id === id);
+      if (rep) {
+        changeListingStatus(rep.listingId, 'suspended', `إيقاف بموجب البلاغ ${rep.caseNumber}: ${resolutionReason}`);
+      }
     }
 
-    logAction('معالجة بلاغ', 'report', id, 'success', `القرار: ${status} - ${resolutionReason}`);
-    showToast(`تمت معالجة القضية بنجاح (${status})`, 'success');
+    showToast('تمت معالجة البلاغ بنجاح', 'success');
   };
 
-  const createTicket = (
+  // --- Support Actions ---
+  const createTicket = async (
     subject: string,
     category: SupportTicket['category'],
     priority: SupportTicket['priority'],
     initialMessage: string
   ) => {
-    const nextTicketNo = `TKT-2026-${tickets.length + 805}`;
+    try {
+      const res = await apiFetch('/api/support/tickets', {
+        method: 'POST',
+        body: JSON.stringify({ subject, category, priority, message: initialMessage })
+      });
+      if (res && res.ok) {
+        const json = await res.json();
+        if (json.ticket) {
+          setTickets(prev => [json.ticket, ...prev]);
+          showToast('تم إرسال تذكرتك بنجاح، وسيقوم ممثل الدعم بالرد قريباً', 'success');
+          return;
+        }
+      }
+    } catch (e) {
+      // offline fallback
+    }
+
+    const nextTktNo = `TKT-2026-${tickets.length + 101}`;
+    const now = new Date().toISOString().split('T')[0];
+    const isSupport = currentUser.role === 'support' || currentUser.role === 'system_admin';
+    const senderRole: 'user' | 'support' = isSupport ? 'support' : 'user';
+
     const newTicket: SupportTicket = {
       id: 'tkt-' + Date.now(),
-      ticketNumber: nextTicketNo,
+      ticketNumber: nextTktNo,
       userId: currentUser.id,
       userName: currentUser.name,
-      userPhone: currentUser.phone || '770000000',
-      subject,
+      userPhone: currentUser.phone,
       category,
+      subject,
       priority,
       status: 'open',
-      createdAt: new Date().toISOString().split('T')[0],
-      updatedAt: new Date().toISOString().split('T')[0],
+      createdAt: now,
+      updatedAt: now,
       messages: [
         {
-          id: 'msg-' + Date.now(),
+          id: 'msg-1',
           senderId: currentUser.id,
           senderName: currentUser.name,
-          senderRole: 'user',
+          senderRole,
           text: initialMessage,
-          timestamp: new Date().toLocaleString('ar-YE', { dateStyle: 'short', timeStyle: 'short' })
+          timestamp: new Date().toLocaleTimeString('ar-YE', { hour: '2-digit', minute: '2-digit' })
         }
       ]
     };
+
     setTickets(prev => [newTicket, ...prev]);
-    logAction('إنشاء تذكرة دعم فني', 'ticket', newTicket.id, 'success', `تذكرة: ${subject}`);
-    showToast('تم إرسال تذكرة الدعم بنجاح وسيتم الرد عليك قريباً', 'success');
+    showToast('تم إرسال تذكرتك بنجاح، وسيقوم ممثل الدعم بالرد قريباً', 'success');
   };
 
-  const replyToTicket = (ticketId: string, text: string) => {
+  const replyToTicket = async (ticketId: string, text: string) => {
+    try {
+      await apiFetch(`/api/support/tickets/${ticketId}/messages`, {
+        method: 'POST',
+        body: JSON.stringify({ message: text })
+      });
+    } catch (e) {
+      // offline fallback
+    }
+
+    const isSupport = currentUser.role === 'support' || currentUser.role === 'system_admin';
+    const senderRole: 'user' | 'support' = isSupport ? 'support' : 'user';
+
     const newMessage = {
       id: 'msg-' + Date.now(),
       senderId: currentUser.id,
       senderName: currentUser.name,
-      senderRole: (currentUser.role === 'support' || currentUser.role === 'system_admin' ? 'support' : 'user') as 'user' | 'support',
+      senderRole,
       text,
-      timestamp: new Date().toLocaleString('ar-YE', { dateStyle: 'short', timeStyle: 'short' })
+      timestamp: new Date().toLocaleTimeString('ar-YE', { hour: '2-digit', minute: '2-digit' })
     };
 
     setTickets(prev =>
-      prev.map(t => {
-        if (t.id === ticketId) {
-          return {
-            ...t,
-            updatedAt: new Date().toISOString().split('T')[0],
-            status: currentUser.role === 'support' ? 'in_progress' : t.status,
-            messages: [...t.messages, newMessage]
-          };
-        }
-        return t;
-      })
+      prev.map(t =>
+        t.id === ticketId
+          ? {
+              ...t,
+              updatedAt: new Date().toISOString().split('T')[0],
+              messages: [...t.messages, newMessage]
+            }
+          : t
+      )
     );
     showToast('تم إرسال الرد بنجاح', 'success');
   };
 
   const updateTicketStatus = (ticketId: string, status: SupportTicket['status']) => {
-    setTickets(prev => prev.map(t => (t.id === ticketId ? { ...t, status } : t)));
-    logAction('تحديث حالة تذكرة دعم', 'ticket', ticketId, 'success', `الحالة الجديدة: ${status}`);
-    showToast(`تم تحديث حالة التذكرة إلى: ${status}`, 'info');
+    setTickets(prev =>
+      prev.map(t => (t.id === ticketId ? { ...t, status, lastUpdate: new Date().toISOString().split('T')[0] } : t))
+    );
+    showToast(`تم تغيير حالة التذكرة إلى: ${status}`, 'info');
   };
 
   const resetToInitialData = () => {
+    localStorage.removeItem('dalani_listings');
+    localStorage.removeItem('dalani_orgs');
+    localStorage.removeItem('dalani_verifications');
+    localStorage.removeItem('dalani_reports');
+    localStorage.removeItem('dalani_tickets');
+    localStorage.removeItem('dalani_audit_logs');
+    localStorage.removeItem('dalani_favorites');
+
     setListings(INITIAL_LISTINGS);
     setOrganizations(INITIAL_ORGANIZATIONS);
     setVerificationRequests(INITIAL_VERIFICATION_REQUESTS);
@@ -552,8 +783,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setTickets(INITIAL_TICKETS);
     setAuditLogs(INITIAL_AUDIT_LOGS);
     setFavorites(['list-101', 'list-103']);
-    localStorage.clear();
-    showToast('تمت استعادة البيانات الافتراضية لمنصة دلنّي بنجاح', 'success');
+
+    showToast('تمت إعادة ضبط البيانات الأولية بنجاح', 'info');
   };
 
   return (
@@ -590,16 +821,45 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         toasts,
         showToast,
         removeToast,
+        refreshData,
         resetToInitialData
       }}
     >
       {children}
+
+      {/* Global Toast Notifications Banner */}
+      <div className="fixed top-4 left-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none">
+        {toasts.map(toast => (
+          <div
+            key={toast.id}
+            className={`pointer-events-auto p-3.5 rounded-2xl shadow-xl border flex items-center justify-between gap-3 text-xs font-bold animate-in fade-in slide-in-from-top-4 duration-200 ${
+              toast.type === 'success'
+                ? 'bg-emerald-950/90 text-emerald-200 border-emerald-800'
+                : toast.type === 'error'
+                ? 'bg-red-950/90 text-red-200 border-red-800'
+                : toast.type === 'warning'
+                ? 'bg-amber-950/90 text-amber-200 border-amber-800'
+                : 'bg-slate-900/90 text-white border-slate-700'
+            }`}
+          >
+            <span>{toast.message}</span>
+            <button
+              onClick={() => removeToast(toast.id)}
+              className="text-white/60 hover:text-white text-base leading-none p-1"
+            >
+              ×
+            </button>
+          </div>
+        ))}
+      </div>
     </AppContext.Provider>
   );
 };
 
 export const useApp = () => {
   const context = useContext(AppContext);
-  if (!context) throw new Error('useApp must be used within an AppProvider');
+  if (!context) {
+    throw new Error('useApp must be used within an AppProvider');
+  }
   return context;
 };
