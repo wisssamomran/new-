@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Listing } from '../types';
+import { DalaniMap } from '../components/DalaniMap';
 import {
   FileCheck,
   CheckCircle,
@@ -12,7 +13,9 @@ import {
   Shield,
   Layers,
   Send,
-  History
+  History,
+  Map as MapIcon,
+  List as ListIcon
 } from 'lucide-react';
 
 interface ModerationPageProps {
@@ -24,6 +27,7 @@ export const ModerationPage: React.FC<ModerationPageProps> = ({ onSelectListing 
 
   const [activeTab, setActiveTab] = useState<'pending' | 'needs_changes' | 'all'>('pending');
   const [selectedReviewListing, setSelectedReviewListing] = useState<Listing | null>(null);
+  const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
 
   // Decision Modal State
   const [decisionType, setDecisionType] = useState<'approve' | 'request_changes' | 'reject' | null>(null);
@@ -104,43 +108,94 @@ export const ModerationPage: React.FC<ModerationPageProps> = ({ onSelectListing 
           </p>
         </div>
 
-        {/* Status Counts */}
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setActiveTab('pending')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
-              activeTab === 'pending'
-                ? 'bg-amber-600 text-white shadow-xs'
-                : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
-            }`}
-          >
-            بانتظار المراجعة ({listings.filter(l => l.status === 'under_review').length})
-          </button>
-          <button
-            onClick={() => setActiveTab('needs_changes')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
-              activeTab === 'needs_changes'
-                ? 'bg-orange-600 text-white shadow-xs'
-                : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
-            }`}
-          >
-            مطلوب تعديلها ({listings.filter(l => l.status === 'needs_changes').length})
-          </button>
-          <button
-            onClick={() => setActiveTab('all')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
-              activeTab === 'all'
-                ? 'bg-[#16324F] text-white shadow-xs'
-                : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
-            }`}
-          >
-            سجل المراجعة الكامل
-          </button>
+        {/* Status Counts & View Switcher */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <button
+              onClick={() => setActiveTab('pending')}
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+                activeTab === 'pending'
+                  ? 'bg-amber-600 text-white shadow-xs'
+                  : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              بانتظار المراجعة ({listings.filter(l => l.status === 'under_review').length})
+            </button>
+            <button
+              onClick={() => setActiveTab('needs_changes')}
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+                activeTab === 'needs_changes'
+                  ? 'bg-orange-600 text-white shadow-xs'
+                  : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              مطلوب تعديلها ({listings.filter(l => l.status === 'needs_changes').length})
+            </button>
+            <button
+              onClick={() => setActiveTab('all')}
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+                activeTab === 'all'
+                  ? 'bg-[#16324F] text-white shadow-xs'
+                  : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              سجل المراجعة الكامل
+            </button>
+          </div>
+
+          {/* List vs Map Switcher */}
+          <div className="bg-white p-1 rounded-2xl border border-slate-200 flex items-center gap-1 text-xs font-bold">
+            <button
+              onClick={() => setViewMode('list')}
+              className={`px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition-all ${
+                viewMode === 'list'
+                  ? 'bg-[#12A889] text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              }`}
+            >
+              <ListIcon className="w-3.5 h-3.5" />
+              <span>جدول الفحص</span>
+            </button>
+            <button
+              onClick={() => setViewMode('map')}
+              className={`px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition-all ${
+                viewMode === 'map'
+                  ? 'bg-[#12A889] text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              }`}
+            >
+              <MapIcon className="w-3.5 h-3.5" />
+              <span>خريطة المراجعة</span>
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Queue List */}
-      {reviewQueue.length === 0 ? (
+      {/* Main Content: Map View OR List View */}
+      {viewMode === 'map' ? (
+        <div className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm">
+          <div className="p-4 bg-slate-900 text-white flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="font-bold text-sm text-white flex items-center gap-2">
+                <span>خريطة فحص ومراجعة الإعلانات العقارية</span>
+                <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
+              </h3>
+              <p className="text-xs text-slate-400">
+                توزيع جغرافي مباشر لطلبات المراجعة مع التحقق من دقة وملاءمة الموقع وصحة الإحداثيات
+              </p>
+            </div>
+          </div>
+
+          <DalaniMap
+            listings={reviewQueue}
+            allowAllStatuses={true}
+            showFilters={false}
+            mapTitle="خريطة طلبات المراجعة الجغرافية"
+            height="580px"
+            onSelectListing={listing => onSelectListing(listing)}
+          />
+        </div>
+      ) : reviewQueue.length === 0 ? (
         <div className="bg-white rounded-3xl p-12 text-center border border-slate-200 space-y-3">
           <FileCheck className="w-12 h-12 text-emerald-500 mx-auto" />
           <h3 className="font-bold text-base text-slate-800">طابور المراجعة فارغ تماماً</h3>

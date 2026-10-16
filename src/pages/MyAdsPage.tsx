@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Listing, ListingStatus } from '../types';
+import { DalaniMap } from '../components/DalaniMap';
 import {
   PlusCircle,
   Clock,
@@ -16,7 +17,9 @@ import {
   Send,
   History,
   ShieldCheck,
-  ChevronDown
+  ChevronDown,
+  Map as MapIcon,
+  List as ListIcon
 } from 'lucide-react';
 
 interface MyAdsPageProps {
@@ -29,6 +32,7 @@ export const MyAdsPage: React.FC<MyAdsPageProps> = ({ onNavigateToWizard, onSele
 
   const [activeTab, setActiveTab] = useState<ListingStatus | 'all'>('all');
   const [selectedTimelineListing, setSelectedTimelineListing] = useState<Listing | null>(null);
+  const [displayMode, setDisplayMode] = useState<'list' | 'map'>('list');
 
   // Security Rule: Show only advertiser's own listings (or organization listings if org agent/manager)
   const myFilteredListings = listings.filter(listing => {
@@ -124,33 +128,92 @@ export const MyAdsPage: React.FC<MyAdsPageProps> = ({ onNavigateToWizard, onSele
         </div>
       </div>
 
-      {/* Tabs Filter */}
-      <div className="bg-white p-1 rounded-2xl border border-slate-200 flex items-center gap-1 overflow-x-auto scrollbar-none text-xs font-bold">
-        {[
-          { tab: 'all', label: `الكل (${counts.all})` },
-          { tab: 'published', label: `المنشورة (${counts.published})` },
-          { tab: 'under_review', label: `قيد المراجعة (${counts.under_review})` },
-          { tab: 'needs_changes', label: `مطلوب تعديلها (${counts.needs_changes})` },
-          { tab: 'draft', label: `المسودات (${counts.draft})` },
-          { tab: 'suspended', label: `موقوفة مؤقتاً (${counts.suspended})` },
-          { tab: 'rejected', label: `المرفوضة (${counts.rejected})` }
-        ].map(item => (
+      {/* Filter Tabs & View Switcher */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        {/* Tabs Filter */}
+        <div className="bg-white p-1 rounded-2xl border border-slate-200 flex items-center gap-1 overflow-x-auto scrollbar-none text-xs font-bold">
+          {[
+            { tab: 'all', label: `الكل (${counts.all})` },
+            { tab: 'published', label: `المنشورة (${counts.published})` },
+            { tab: 'under_review', label: `قيد المراجعة (${counts.under_review})` },
+            { tab: 'needs_changes', label: `مطلوب تعديلها (${counts.needs_changes})` },
+            { tab: 'draft', label: `المسودات (${counts.draft})` },
+            { tab: 'suspended', label: `موقوفة مؤقتاً (${counts.suspended})` },
+            { tab: 'rejected', label: `المرفوضة (${counts.rejected})` }
+          ].map(item => (
+            <button
+              key={item.tab}
+              onClick={() => setActiveTab(item.tab as any)}
+              className={`px-3.5 py-2 rounded-xl whitespace-nowrap transition-all ${
+                activeTab === item.tab
+                  ? 'bg-[#16324F] text-white shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+
+        {/* View Mode Switcher (List vs Map) */}
+        <div className="bg-white p-1 rounded-2xl border border-slate-200 flex items-center gap-1 text-xs font-bold self-end sm:self-auto flex-shrink-0">
           <button
-            key={item.tab}
-            onClick={() => setActiveTab(item.tab as any)}
-            className={`px-3.5 py-2 rounded-xl whitespace-nowrap transition-all ${
-              activeTab === item.tab
-                ? 'bg-[#16324F] text-white shadow-2xs'
+            onClick={() => setDisplayMode('list')}
+            className={`px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-all ${
+              displayMode === 'list'
+                ? 'bg-[#12A889] text-white shadow-xs'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
             }`}
           >
-            {item.label}
+            <ListIcon className="w-4 h-4" />
+            <span>قائمة الإعلانات</span>
           </button>
-        ))}
+          <button
+            onClick={() => setDisplayMode('map')}
+            className={`px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-all ${
+              displayMode === 'map'
+                ? 'bg-[#12A889] text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+            }`}
+          >
+            <MapIcon className="w-4 h-4" />
+            <span>خريطة عقاراتي</span>
+          </button>
+        </div>
       </div>
 
-      {/* Listings Table / Cards */}
-      {displayedListings.length === 0 ? (
+      {/* Main Content: Map View OR List View */}
+      {displayMode === 'map' ? (
+        <div className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm">
+          <div className="p-4 bg-slate-900 text-white flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="font-bold text-sm text-white flex items-center gap-2">
+                <span>خريطة إعلاناتي العقارية المباشرة</span>
+                <span className="w-2 h-2 rounded-full bg-[#12A889] animate-ping"></span>
+              </h3>
+              <p className="text-xs text-slate-400">
+                عرض مواقع إعلاناتك الجغرافية مع تمييز الحالات (مسودات، قيد المراجعة، منشور) وفق صلاحياتك
+              </p>
+            </div>
+            <button
+              onClick={onNavigateToWizard}
+              className="px-4 py-2 bg-[#12A889] hover:bg-[#0f8d73] text-white text-xs font-bold rounded-xl transition-colors flex items-center gap-1.5"
+            >
+              <PlusCircle className="w-4 h-4" />
+              <span>إضافة وتحديد عقار جديد</span>
+            </button>
+          </div>
+
+          <DalaniMap
+            listings={displayedListings}
+            allowAllStatuses={true}
+            showFilters={false}
+            mapTitle="خريطة إعلاناتي العقارية"
+            height="580px"
+            onSelectListing={onSelectListing}
+          />
+        </div>
+      ) : displayedListings.length === 0 ? (
         <div className="bg-white rounded-3xl p-12 text-center border border-slate-200 space-y-3">
           <FileText className="w-12 h-12 text-slate-300 mx-auto" />
           <h3 className="font-bold text-sm text-slate-700">لا توجد إعلانات مسجلة في هذا القسم</h3>

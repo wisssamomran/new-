@@ -1,33 +1,61 @@
 import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
-import { Listing } from '../types';
+import { Listing, ListingStatus } from '../types';
 import { YEMEN_GOVERNORATES } from '../data/yemenData';
 import { useApp } from '../context/AppContext';
-import { Layers, MapPin, Navigation, Eye, AlertCircle, Key, CheckCircle, List, Compass, Crosshair, Loader2 } from 'lucide-react';
+import {
+  Layers,
+  MapPin,
+  Navigation,
+  Eye,
+  AlertCircle,
+  Key,
+  CheckCircle,
+  List,
+  Compass,
+  Crosshair,
+  Loader2,
+  Check,
+  LocateFixed,
+  Sparkles,
+  ShieldAlert,
+  Clock
+} from 'lucide-react';
 
 interface DalaniMapProps {
-  listings: Listing[];
+  listings?: Listing[];
   selectedListingId?: string;
   onSelectListing?: (listing: Listing) => void;
   className?: string;
   height?: string;
   showFilters?: boolean;
   selectedGovernorate?: string;
+  allowAllStatuses?: boolean;
+  enableLocationPicker?: boolean;
+  selectedCoords?: { lat: number; lng: number };
+  onLocationSelected?: (coords: { lat: number; lng: number }) => void;
+  mapTitle?: string;
 }
 
 export const DalaniMap: React.FC<DalaniMapProps> = ({
-  listings,
+  listings = [],
   selectedListingId,
   onSelectListing,
   className = '',
   height = '580px',
   showFilters = true,
-  selectedGovernorate
+  selectedGovernorate,
+  allowAllStatuses = false,
+  enableLocationPicker = false,
+  selectedCoords,
+  onLocationSelected,
+  mapTitle
 }) => {
   const { googleMapsApiKey, setGoogleMapsApiKey, showToast } = useApp();
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markersLayerRef = useRef<L.LayerGroup | null>(null);
+  const pickerMarkerRef = useRef<L.Marker | null>(null);
   const userMarkerRef = useRef<L.Marker | null>(null);
   const userCircleRef = useRef<L.Circle | null>(null);
 
@@ -40,6 +68,22 @@ export const DalaniMap: React.FC<DalaniMapProps> = ({
   const [mapError, setMapError] = useState<boolean>(false);
   const [isLocating, setIsLocating] = useState<boolean>(false);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+
+  // Current picker coordinates (controlled or internal)
+  const [currentPickerCoords, setCurrentPickerCoords] = useState<{ lat: number; lng: number }>(
+    selectedCoords || { lat: 15.3694, lng: 44.1910 }
+  );
+
+  // Sync internal picker coords with external props if provided
+  useEffect(() => {
+    if (selectedCoords && (selectedCoords.lat !== currentPickerCoords.lat || selectedCoords.lng !== currentPickerCoords.lng)) {
+      setCurrentPickerCoords(selectedCoords);
+      if (pickerMarkerRef.current && mapInstanceRef.current) {
+        pickerMarkerRef.current.setLatLng([selectedCoords.lat, selectedCoords.lng]);
+        mapInstanceRef.current.panTo([selectedCoords.lat, selectedCoords.lng]);
+      }
+    }
+  }, [selectedCoords]);
 
   // Automatically fly to selected governorate when changed from external dropdown
   useEffect(() => {
@@ -141,78 +185,176 @@ export const DalaniMap: React.FC<DalaniMapProps> = ({
     }
   }, [activeTileLayer]);
 
-  // Update Markers when listings change
+  // Update Markers when listings or picker mode change
   useEffect(() => {
     if (!mapInstanceRef.current || !markersLayerRef.current) return;
+    const map = mapInstanceRef.current;
     const markersLayer = markersLayerRef.current;
     markersLayer.clearLayers();
 
-    // Only render published and active listings for map viewers
-    const activeListings = listings.filter(l => l.status === 'published');
+    // If Location Picker Mode is enabled
+    if (enableLocationPicker) {
+      const pickerPinHtml = `
+        <div class="relative flex flex-col items-center cursor-grab active:cursor-grabbing transform -translate-y-2">
+          <div class="px-3 py-1.5 bg-[#12A889] text-white text-xs font-bold rounded-full shadow-2xl border-2 border-white flex items-center gap-1.5 whitespace-nowrap">
+            <span class="w-2 h-2 rounded-full bg-white animate-ping"></span>
+            <span>📍 موقع العقار المحدد</span>
+          </div>
+          <div class="w-3.5 h-3.5 bg-[#12A889] transform rotate-45 -mt-1.5 border-r border-b border-white shadow-md"></div>
+          <div class="w-8 h-8 rounded-full bg-[#12A889]/30 -mt-3 animate-pulse pointer-events-none"></div>
+        </div>
+      `;
 
-    activeListings.forEach(listing => {
-      const { lat, lng } = listing.location;
+      const pickerIcon = L.divIcon({
+        className: 'dalani-picker-pin',
+        html: pickerPinHtml,
+        iconSize: [140, 50],
+        iconAnchor: [70, 48]
+      });
+
+      const pickerMarker = L.marker([currentPickerCoords.lat, currentPickerCoords.lng], {
+        icon: pickerIcon,
+        draggable: true,
+        zIndexOffset: 2000
+      });
+
+      pickerMarker.on('dragend', () => {
+        const pos = pickerMarker.getLatLng();
+        const coords = { lat: Number(pos.lat.toFixed(6)), lng: Number(pos.lng.toFixed(6)) };
+        setCurrentPickerCoords(coords);
+        if (onLocationSelected) {
+          onLocationSelected(coords);
+        }
+      });
+
+      pickerMarker.bindPopup(`
+        <div style="text-align: right; font-family: sans-serif; direction: rtl; padding: 4px;">
+          <div style="font-weight: bold; color: #16324F; font-size: 12px; margin-bottom: 4px;">🎯 إحداثيات العقار المحددة</div>
+          <div style="font-size: 11px; color: #475569; font-family: monospace;">
+            العرض: ${currentPickerCoords.lat.toFixed(5)}°<br/>
+            الطول: ${currentPickerCoords.lng.toFixed(5)}°
+          </div>
+          <div style="font-size: 10px; color: #12A889; margin-top: 4px; font-weight: bold;">
+            يمكنك سحب العلامة أو النقر على الخريطة لتعديل الموقع
+          </div>
+        </div>
+      `);
+
+      markersLayer.addLayer(pickerMarker);
+      pickerMarkerRef.current = pickerMarker;
+
+      // Handle map click to reposition picker
+      const handleMapClick = (e: L.LeafletMouseEvent) => {
+        const newCoords = { lat: Number(e.latlng.lat.toFixed(6)), lng: Number(e.latlng.lng.toFixed(6)) };
+        setCurrentPickerCoords(newCoords);
+        pickerMarker.setLatLng(e.latlng);
+        if (onLocationSelected) {
+          onLocationSelected(newCoords);
+        }
+      };
+
+      map.on('click', handleMapClick);
+
+      return () => {
+        map.off('click', handleMapClick);
+      };
+    }
+
+    // Standard Listings View (Filtered or All Statuses)
+    const targetListings = allowAllStatuses ? listings : listings.filter(l => l.status === 'published');
+
+    const statusMeta: Record<string, { label: string; bg: string; border: string; text: string; badgeClass: string }> = {
+      published: { label: 'منشور', bg: '#16324F', border: '#12A889', text: '#ffffff', badgeClass: 'bg-emerald-600 text-white' },
+      under_review: { label: 'قيد المراجعة', bg: '#78350F', border: '#F59E0B', text: '#ffffff', badgeClass: 'bg-amber-600 text-white' },
+      draft: { label: 'مسودة', bg: '#334155', border: '#94A3B8', text: '#ffffff', badgeClass: 'bg-slate-600 text-white' },
+      needs_changes: { label: 'مطلوب تعديله', bg: '#7C2D12', border: '#EA580C', text: '#ffffff', badgeClass: 'bg-orange-600 text-white' },
+      pending_verification: { label: 'بانتظار التحقق', bg: '#1E3A8A', border: '#3B82F6', text: '#ffffff', badgeClass: 'bg-blue-600 text-white' },
+      pending_completion: { label: 'غير مكتمل', bg: '#9A3412', border: '#FB923C', text: '#ffffff', badgeClass: 'bg-orange-600 text-white' },
+      suspended: { label: 'موقوف', bg: '#881337', border: '#F43F5E', text: '#ffffff', badgeClass: 'bg-rose-600 text-white' },
+      rejected: { label: 'مرفوض', bg: '#7F1D1D', border: '#EF4444', text: '#ffffff', badgeClass: 'bg-red-600 text-white' },
+      cancelled: { label: 'ملغى', bg: '#334155', border: '#64748B', text: '#ffffff', badgeClass: 'bg-slate-500 text-white' },
+      expired: { label: 'منتهٍ', bg: '#475569', border: '#94A3B8', text: '#ffffff', badgeClass: 'bg-slate-500 text-white' }
+    };
+
+    targetListings.forEach(listing => {
+      const lat = listing.location?.lat ?? (listing.location as any)?.latitude;
+      const lng = listing.location?.lng ?? (listing.location as any)?.longitude;
       if (!lat || !lng) return;
 
       const formattedPrice =
         listing.currency === 'USD'
-          ? `$${listing.price.toLocaleString()}`
+          ? `$${(listing.price || 0).toLocaleString()}`
           : listing.currency === 'SAR'
-          ? `${listing.price.toLocaleString()} ر.س`
-          : `${(listing.price / 1000000).toFixed(1)}M ر.ي`;
+          ? `${(listing.price || 0).toLocaleString()} ر.س`
+          : `${((listing.price || 0) / 1000000).toFixed(1)}M ر.ي`;
 
       const isSelected = listing.id === selectedListingId;
+      const statusInfo = statusMeta[listing.status] || statusMeta.published;
+      const showStatusTag = allowAllStatuses && listing.status !== 'published';
 
-      // Custom HTML Pin with Dalani colors
+      // Custom HTML Pin with Dalani colors and optional role-specific status styling
       const pinHtml = `
         <div class="cursor-pointer transition-all duration-300 transform hover:scale-110 ${isSelected ? 'scale-115 z-50' : ''}">
           <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full shadow-lg font-bold text-xs border-2 ${
             isSelected
               ? 'bg-[#12A889] text-white border-white ring-4 ring-[#12A889]/30'
-              : 'bg-[#16324F] text-white border-[#12A889]'
-          }">
-            <span class="w-2 h-2 rounded-full ${isSelected ? 'bg-white' : 'bg-[#12A889]'} animate-pulse"></span>
+              : ''
+          }" style="${!isSelected ? `background-color: ${statusInfo.bg}; color: ${statusInfo.text}; border-color: ${statusInfo.border};` : ''}">
+            <span class="w-2 h-2 rounded-full ${isSelected ? 'bg-white' : ''}" style="${!isSelected ? `background-color: ${statusInfo.border};` : ''} animate-pulse"></span>
             <span>${formattedPrice}</span>
+            ${showStatusTag ? `<span class="text-[9px] px-1.5 py-0.2 rounded-full bg-black/30 font-medium">${statusInfo.label}</span>` : ''}
           </div>
-          <div class="w-2.5 h-2.5 bg-[#16324F] mx-auto transform rotate-45 -mt-1.5 border-r border-b border-[#12A889]"></div>
+          <div class="w-2.5 h-2.5 mx-auto transform rotate-45 -mt-1.5 border-r border-b" style="background-color: ${isSelected ? '#12A889' : statusInfo.bg}; border-color: ${isSelected ? '#ffffff' : statusInfo.border};"></div>
         </div>
       `;
 
       const customIcon = L.divIcon({
         className: 'dalani-custom-pin',
         html: pinHtml,
-        iconSize: [85, 34],
-        iconAnchor: [42, 34]
+        iconSize: [showStatusTag ? 120 : 85, 34],
+        iconAnchor: [showStatusTag ? 60 : 42, 34]
       });
 
       const marker = L.marker([lat, lng], { icon: customIcon });
 
       // Rich Yemen Property Popup
       const popupContent = document.createElement('div');
-      popupContent.className = 'p-3 max-w-[270px] text-right font-sans';
+      popupContent.className = 'p-3 max-w-[280px] text-right font-sans';
       const mainImg = (listing.images && listing.images[0]) || 'https://images.unsplash.com/photo-1560518883-ce09059eeffa?auto=format&fit=crop&w=600&q=80';
       const locationText = `${listing.location?.city || ''} ${listing.location?.district ? `- ${listing.location.district}` : ''}`.trim() || 'اليمن';
       popupContent.innerHTML = `
         <div class="relative overflow-hidden rounded-lg mb-2">
           <img src="${mainImg}" alt="${listing.title}" class="w-full h-28 object-cover rounded-md" />
-          <span class="absolute top-2 right-2 bg-[#12A889] text-white text-[11px] font-bold px-2 py-0.5 rounded shadow">
-            ${listing.purpose === 'sale' ? 'للبيع' : listing.purpose === 'rent' ? 'للإيجار' : 'استثمار'}
-          </span>
+          <div class="absolute top-2 right-2 flex flex-col gap-1 items-end">
+            <span class="bg-[#12A889] text-white text-[10px] font-bold px-2 py-0.5 rounded shadow">
+              ${listing.purpose === 'sale' ? 'للبيع' : listing.purpose === 'rent' ? 'للإيجار' : 'استثمار'}
+            </span>
+            ${listing.status !== 'published' ? `
+              <span class="${statusInfo.badgeClass} text-[10px] font-bold px-2 py-0.5 rounded shadow">
+                ${statusInfo.label}
+              </span>
+            ` : ''}
+          </div>
           <span class="absolute bottom-2 left-2 bg-[#16324F]/90 text-white text-[11px] font-bold px-2 py-0.5 rounded backdrop-blur-xs">
             ${formattedPrice}
           </span>
         </div>
         <h4 class="font-bold text-sm text-[#16324F] mb-1 line-clamp-1 leading-snug">${listing.title}</h4>
-        <div class="flex items-center gap-1 text-xs text-slate-500 mb-2">
+        <div class="flex items-center gap-1 text-xs text-slate-500 mb-1.5">
           <span>📍</span>
           <span>${locationText}</span>
         </div>
+        ${listing.location?.isApproximate ? `
+          <div class="text-[10px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 mb-2 font-medium">
+            🛡️ موقع تقريبي لحماية الخصوصية
+          </div>
+        ` : ''}
         <div class="flex items-center justify-between text-xs border-t border-slate-100 pt-2 mb-2 text-slate-600 font-medium">
           <span>المساحة: ${listing.area || 0} ${listing.areaUnit || 'م²'}</span>
           ${listing.attributes?.rooms ? `<span>${listing.attributes.rooms} غرف</span>` : ''}
         </div>
         <button id="view-listing-${listing.id}" class="w-full py-1.5 px-3 bg-[#16324F] hover:bg-[#12A889] text-white text-xs font-bold rounded-lg transition-colors flex items-center justify-center gap-1">
-          <span>معاينة التفاصيل الكاملة</span>
+          <span>معاينة وتفاصيل العقار</span>
           <span>←</span>
         </button>
       `;
@@ -234,7 +376,7 @@ export const DalaniMap: React.FC<DalaniMapProps> = ({
 
       markersLayer.addLayer(marker);
     });
-  }, [listings, selectedListingId, onSelectListing]);
+  }, [listings, selectedListingId, onSelectListing, allowAllStatuses, enableLocationPicker, currentPickerCoords]);
 
   // Quick Fly to Governorate
   const handleFlyToGov = (govName: string) => {
@@ -363,11 +505,13 @@ export const DalaniMap: React.FC<DalaniMapProps> = ({
             </div>
             <div>
               <h3 className="font-bold text-sm text-white flex items-center gap-2">
-                <span>خريطة عقارات اليمن التفاعلية</span>
+                <span>{mapTitle || 'خريطة عقارات اليمن التفاعلية'}</span>
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
               </h3>
               <p className="text-xs text-slate-400">
-                {listings.filter(l => l.status === 'published').length} عقاراً منشوراً ومطابقاً للشروط العامة
+                {allowAllStatuses
+                  ? `${listings.length} عقاراً متوفراً حسب صلاحيات العرض والحالة`
+                  : `${listings.filter(l => l.status === 'published').length} عقاراً منشوراً ومطابقاً للشروط العامة`}
               </p>
             </div>
           </div>
@@ -456,11 +600,70 @@ export const DalaniMap: React.FC<DalaniMapProps> = ({
             <div ref={mapContainerRef} className="w-full h-full z-10" />
           )}
 
+          {/* Location Picker Overlay Bar (When enableLocationPicker is true) */}
+          {enableLocationPicker && (
+            <div className="absolute top-4 inset-x-4 sm:inset-x-auto sm:right-6 sm:left-6 z-25 bg-white/95 backdrop-blur-md rounded-2xl p-3.5 shadow-xl border border-slate-200/90 pointer-events-auto flex flex-wrap items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2 duration-200">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-[#12A889]/15 flex items-center justify-center text-[#12A889] flex-shrink-0">
+                  <MapPin className="w-5 h-5 animate-bounce" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-xs sm:text-sm text-[#16324F]">تحديد موقع العقار على الخريطة</span>
+                    {currentPickerCoords.lat >= 12 && currentPickerCoords.lat <= 19.5 && currentPickerCoords.lng >= 41 && currentPickerCoords.lng <= 55 ? (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        <Check className="w-3 h-3 text-emerald-600" />
+                        <span>ضمن الجمهورية اليمنية</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                        <AlertCircle className="w-3 h-3 text-amber-600" />
+                        <span>تحقق من الإحداثيات</span>
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[11px] text-slate-500 font-mono mt-0.5 flex items-center gap-2">
+                    <span>خط العرض: <strong className="text-slate-800">{currentPickerCoords.lat.toFixed(5)}°</strong></span>
+                    <span>•</span>
+                    <span>خط الطول: <strong className="text-slate-800">{currentPickerCoords.lng.toFixed(5)}°</strong></span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                <button
+                  type="button"
+                  onClick={handleLocateMe}
+                  disabled={isLocating}
+                  className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors flex items-center gap-1.5"
+                  title="استخدام موقعي الحالي"
+                >
+                  {isLocating ? <Loader2 className="w-3.5 h-3.5 animate-spin text-[#12A889]" /> : <LocateFixed className="w-3.5 h-3.5 text-[#12A889]" />}
+                  <span>موقعي الحالي (GPS)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onLocationSelected) {
+                      onLocationSelected(currentPickerCoords);
+                    }
+                    showToast('تم تأكيد وحفظ الإحداثيات المحددة بنجاح 🎯', 'success');
+                  }}
+                  className="px-4 py-1.5 rounded-xl bg-[#12A889] hover:bg-[#0f8d73] text-white text-xs font-bold shadow-sm transition-all flex items-center gap-1.5"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>تأكيد الموقع</span>
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Floating Controls for Clean Fullscreen Mode (Positioned vertically at bottom of page as requested) */}
           {!showFilters && (
             <div className="absolute bottom-6 left-3 sm:left-6 z-25 flex flex-col gap-2 pointer-events-auto">
               {/* Satellite vs Streets Floating Button */}
               <button
+                type="button"
                 onClick={() => setActiveTileLayer(activeTileLayer === 'streets' ? 'google_hybrid' : 'streets')}
                 className="w-10 h-10 rounded-2xl bg-white/95 backdrop-blur-md border border-slate-200 shadow-lg text-[#16324F] hover:bg-slate-50 flex items-center justify-center transition-all hover:scale-105"
                 title={activeTileLayer === 'streets' ? 'التحويل للأقمار الصناعية' : 'التحويل لخريطة الشوارع'}
@@ -470,6 +673,7 @@ export const DalaniMap: React.FC<DalaniMapProps> = ({
 
               {/* Locate My Position Button (القناصة) */}
               <button
+                type="button"
                 onClick={handleLocateMe}
                 disabled={isLocating}
                 className={`w-10 h-10 rounded-2xl bg-white/95 backdrop-blur-md border shadow-lg flex items-center justify-center transition-all hover:scale-105 ${
@@ -488,6 +692,7 @@ export const DalaniMap: React.FC<DalaniMapProps> = ({
 
               {/* Discrete Google API Key Config Trigger */}
               <button
+                type="button"
                 onClick={() => setShowKeyModal(true)}
                 className="w-10 h-10 rounded-2xl bg-white/95 backdrop-blur-md border border-slate-200 shadow-lg text-slate-700 hover:bg-slate-50 flex items-center justify-center transition-all hover:scale-105"
                 title="إعدادات مفتاح الخريطة"
@@ -506,8 +711,20 @@ export const DalaniMap: React.FC<DalaniMapProps> = ({
             <div className="flex items-center gap-3 text-slate-600 text-[10px]">
               <div className="flex items-center gap-1">
                 <span className="w-2 h-2 rounded-full bg-[#16324F] inline-block"></span>
-                <span>نشط</span>
+                <span>منشور</span>
               </div>
+              {allowAllStatuses && (
+                <>
+                  <div className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-[#F59E0B] inline-block"></span>
+                    <span>قيد المراجعة</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-[#64748B] inline-block"></span>
+                    <span>مسودة</span>
+                  </div>
+                </>
+              )}
               <div className="flex items-center gap-1">
                 <span className="w-2 h-2 rounded-full bg-[#12A889] inline-block"></span>
                 <span>المحدد</span>

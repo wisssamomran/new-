@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { PropertyType, ListingPurpose, Currency, AreaUnit, PrivateDocument } from '../types';
 import { YEMEN_GOVERNORATES } from '../data/yemenData';
+import { DalaniMap } from '../components/DalaniMap';
 import {
   CheckCircle2,
   ChevronLeft,
@@ -133,6 +134,11 @@ export const AdWizardPage: React.FC<AdWizardPageProps> = ({ onFinish, onCancel }
   const handleSubmit = async (asDraft: boolean = false) => {
     if (!title.trim() || !description.trim() || price <= 0) {
       showToast('يرجى ملء عنوان الإعلان ووصفه وتحديد السعر بشكل سليم', 'error');
+      return;
+    }
+
+    if (!lat || !lng || lat < 11 || lat > 20 || lng < 41 || lng > 55) {
+      showToast('يرجى تحديد موقع جغرافي صحيح للعقار ضمن الجمهورية اليمنية', 'error');
       return;
     }
 
@@ -322,8 +328,28 @@ export const AdWizardPage: React.FC<AdWizardPageProps> = ({ onFinish, onCancel }
 
         {/* STEP 2: Location */}
         {currentStep === 2 && (
-          <div className="space-y-6 animate-in fade-in duration-200">
-            <h3 className="font-bold text-base text-[#16324F] mb-1">حدد موقع العقار بدقة في اليمن:</h3>
+          <div className="space-y-5 animate-in fade-in duration-200">
+            <div>
+              <h3 className="font-bold text-base text-[#16324F] mb-1">حدد موقع العقار بدقة في اليمن:</h3>
+              <p className="text-xs text-slate-500">
+                يمكنك النقر المباشر على الخريطة لتثبيت العلامة أو سحبها، أو اختيار المحافظة والمدينة للتركيز التلقائي.
+              </p>
+            </div>
+
+            {/* Interactive Leaflet/Google Hybrid Map for Pin Placement */}
+            <div className="rounded-2xl overflow-hidden border border-slate-200 shadow-sm relative">
+              <DalaniMap
+                showFilters={false}
+                height="320px"
+                enableLocationPicker={true}
+                selectedCoords={{ lat, lng }}
+                selectedGovernorate={governorate}
+                onLocationSelected={coords => {
+                  setLat(coords.lat);
+                  setLng(coords.lng);
+                }}
+              />
+            </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
               <div>
@@ -331,7 +357,7 @@ export const AdWizardPage: React.FC<AdWizardPageProps> = ({ onFinish, onCancel }
                 <select
                   value={governorate}
                   onChange={e => handleGovernorateChange(e.target.value)}
-                  className="w-full px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-bold"
+                  className="w-full px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-bold focus:ring-2 focus:ring-[#12A889]"
                 >
                   {YEMEN_GOVERNORATES.map(gov => (
                     <option key={gov.name} value={gov.name}>
@@ -347,7 +373,7 @@ export const AdWizardPage: React.FC<AdWizardPageProps> = ({ onFinish, onCancel }
                   type="text"
                   value={city}
                   onChange={e => setCity(e.target.value)}
-                  className="w-full px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl"
+                  className="w-full px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#12A889]"
                 />
               </div>
 
@@ -358,7 +384,7 @@ export const AdWizardPage: React.FC<AdWizardPageProps> = ({ onFinish, onCancel }
                   value={district}
                   onChange={e => setDistrict(e.target.value)}
                   placeholder="مثال: حدة، خورمكسر، بيت بوس..."
-                  className="w-full px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl"
+                  className="w-full px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#12A889]"
                 />
               </div>
             </div>
@@ -370,7 +396,7 @@ export const AdWizardPage: React.FC<AdWizardPageProps> = ({ onFinish, onCancel }
                 value={street}
                 onChange={e => setStreet(e.target.value)}
                 placeholder="مثال: شارع الخمسين أمام فندق..."
-                className="w-full px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs"
+                className="w-full px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-[#12A889]"
               />
             </div>
 
